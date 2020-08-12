@@ -7,11 +7,10 @@ require(tidyr)
 require(googlesheets)
 require(splitstackshape)
 source("mygate.r")
+if(search() %>% str_detect("keys.data") %>% any() %>% not) attach("keys.data")
 
-key_parkingdetails <- "1xSd47bmtLjuv2Kb9AdUD0F8eNl5Y5Arc0mwiv_0FXWo" # Parking Details Master - title
 rawimp1 <- fread("carpmystic.csv",drop = c(3,4,5,6)) #tanveer sheet
 rawimp2 <- fread("ecpl_parking.csv") #nalini sheet
-key_rdu <- "1VKdJq_HS3QOJ5fdoJAsoGrUoM4yJPWi402-IV3y-I38"
 
 names(rawimp1) <- c("flatn","name","parkstr")
 cSplit(rawimp1,splitCols = "parkstr",sep = "&",direction = "wide") -> dtpm
@@ -31,12 +30,6 @@ dtp %>% melt.data.table(id.vars = c("name","flatn","soldby"),value.name = "slot"
 allotted_parking <- dtp2[,flatn:=as.integer(flatn)]
 setcolorder(allotted_parking,neworder = c("slot","variable", "flatn","name","soldby"))
 allotted_parking[order(slot)]->allotted_parking
-
-# cars_in_parking = allotted_parking[manual, on="slot"][,.(name=first(name),parking_slots=list(unique(slot)),cars_parked=list(unique(vehicle))),by=flatn]
-# cars_in_parking[,car_numbers:=sapply(cars_parked,FUN = paste,collapse=",")]
-# cars_in_parking[,parking:=sapply(parking_slots,FUN = paste,collapse=",")]
-# cars_in_parking[,cars_parked:=NULL]
-# cars_in_parking[,parking_slots:=NULL]
 
 
 read_veh <- function(ghandle = gs_key(key_parkingdetails),survey=T) { # Parking Details of Rudra - manual noting of car numbers
@@ -80,15 +73,6 @@ hres[,joined_on:=as.Date(paste0(yr,"-",mth,"-",day))]
 invalid_plates <- function(dt=manual,park=all_parking) dt[all_parking,on="slot"][labelled_flatn!=flatn,.(slot,labelled_flatn,'Actual allocation'=flatn,vehicle)][order(slot)]
 
 if(!exists("rdu")) rdu <- down_rdu()
-
-# rdu[dtp,.(flatn,oname,isres,parkstr_1,parkstr_2,parkstr_3,soldby),on="flatn"][order(flatn)] ->mast
-# mast[manual,on=.(parkstr_1=slot),nomatch=0] -> slot1_match
-# mast[manual,on=.(parkstr_2=slot),nomatch=0] -> slot2_match
-# names(slot1_match)[names(slot1_match)=="vehicle"] <-"vehn1"
-# names(slot2_match)[names(slot2_match)=="vehicle"] <-"vehn2"
-# slot2_match[,.(flatn,vehn2,numb)] -> dt_short
-# merge(slot1_match,dt_short,by="flatn",all=T) -> mast2
-# parking_master = unique(mast2,by="flatn")[order(flatn)]
 
 #print the slot wise cars as parked on ground for two consecutive days.
 print_cars <- function() allotted_parking[
