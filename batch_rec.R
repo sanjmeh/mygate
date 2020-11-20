@@ -10,7 +10,6 @@ library(markdown)
 library(rmarkdown)
 library(data.table)
 library(purrr)
-library(googlesheets)
 
 
 
@@ -178,8 +177,8 @@ load_bounce <- function(infile="chq_bounce.txt",download=F){
 # Main function for creating monthly invoices
 # Pls ensure st_master is updated with all payment tagging and penalty file is uptodate.
 create_invoices <- function(for_mnth=5, goforflats="invoice.txt", penalty_data= "penalty.txt", rdu=fread("rdu.txt"),
-                            chq_bounce_data="chq_bounce.txt", st=st_master,foryear=2020,rmd="invoice1.Rmd",savesummary=T,cutfiles=T,upload=F){
-  cat(sprintf("Latest bank record that was tagged found for:%s",st[!is.na(category),last(cr_date)]))
+                            chq_bounce_data="chq_bounce.txt",foryear=2020,rmd="invoice1.Rmd",savesummary=T,cutfiles=T,upload=F){
+  #cat(sprintf("Latest bank record that was tagged found for:%s",st[!is.na(category),last(cr_date)]))
   fact_mnth <- crfactm(for_mnth,foryear)
   #reco2 <- reconcile(sumlev = 2)[,.(flatn,cr_date,chq,credit,mode,mnthfor,due_date,delay_days,late_penalty,interest)]
   #rdu <- fread(flats_data) # ensure the latest googlesheet is downloaded
@@ -202,7 +201,7 @@ create_invoices <- function(for_mnth=5, goforflats="invoice.txt", penalty_data= 
   data[,cgst:=0.09*amount]
   data[,sgst:=0.09*amount]
   data[,total:=amount + cgst + sgst]
-  data <- lastpaid()[data,on="flatn"]
+  #data <- lastpaid()[data,on="flatn"]
   cols <- qc(intt,latepen,bcharges)
   data[,(cols):=map(.SD,~ifelse(is.na(.x),0,.x)),.SDcols=cols] # replacing NA with 0 neat trick in data.table
   if(is.numeric(goforflats)) sel_flats <- goforflats else
@@ -240,17 +239,18 @@ create_party_invoices <- function(goforflats="party.txt",rmd="invoice_party.Rmd"
 
 
 #  working...
-create_gen_receipts <- function(lstmnt,starting="2019-08-01",flatnbs="ALL", selaccts="ALL",ownernames="ALL", rect_range=1:10000,rmd="receipts_general.Rmd", sumfile="receipts_summary.csv",regenerate=F){
+create_gen_receipts <- function(st,starting="2019-08-01",flatnbs="ALL", selaccts="ALL",ownernames="ALL", rect_range=1:10000,rmd="receipts_general.Rmd", sumfile="receipts_summary.csv",regenerate=F){
   strt <- as.Date(starting)
-  st_acct <- join_accts(lstmnt[[1]])
+  st_acct <- join_accts(st)
   st_subset <- st_acct[as.Date(cr_date)>=as.Date(starting)]
-  if(length(flatnbs)==1 && flatnbs !="ALL" || length(flatnbs) > 1) st_subset <- st_subset[grepl(paste(flatnbs,collapse = "|"),flats)] # remember this may overselect a few flats as this is a crude pattern match of flat number
+  if(length(flatnbs)==1 && flatnbs !="ALL" || length(flatnbs) > 1) 
+    st_subset <- st_subset[grepl(paste(flatnbs,collapse = "|"),flats)] # remember this may overselect a few flats as this is a crude pattern match of flat number
   if(selaccts !="ALL") st_subset <- st_subset[acct %in% selaccts] 
   st_acct_det <- st_subset[acct_grp,on="acct",nomatch=0]
   st_enriched <- st_acct_det[,owner:=ifelse(ownernames=="ALL", getoname(flatn) %>% broman::vec2string(), getoname(flatn)[1]),by=flatn]
-  cumacct <- reco_cum(lstmnt)
+  cumacct <- reco_cum(st)
   dt <- st_enriched[cumacct,on="acct",nomatch=0]
-  dt <- dt[str_extract(rectnb,"\\d+") %in% rect_range,.(cr_date,flats,acct,owner,category,paidupto,cr,booked_cr,rectnb,chq,mode,chq_date)][order(cr_date)]
+  dt <- dt[str_extract(bank_tx_id,"\\d+") %in% rect_range,.(cr_date,flats,acct,owner,category,paidupto,cr,booked_cr=cr,rectnb=bank_tx_id,chq,mode,chq_date)][order(cr_date)]
   if(regenerate) seq_len(nrow(dt)) %>% walk(~cr_pdf_greceipt(dt,.x,rmd)) # rmd is receipt file name
   fwrite(dt,file=sumfile,dateTimeAs = "write.csv")
 }

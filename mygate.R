@@ -23,6 +23,7 @@ library(kableExtra)
 library(RColorBrewer)
 source("~/Dropbox/bank-statements/globalfns.r")
 if(search() %>% str_detect("keys.data") %>% any() %>% not) attach("keys.data")
+if(search() %>% str_detect("mygate.keydata") %>% any() %>% not) attach("mygate.keydata")
 
 fpath <- normalizePath(dirname(path = "."))
 if(grepl("Dropbox",fpath)) okpath <- grepl("RWAdata$",fpath) else
@@ -170,16 +171,17 @@ read_allcsv <- function(names="^vis...\\.csv",path=".",save=T){
   vislog
 }
 
-correct_names <- function(dt=vislog,corr="name_corr.csv"){
+# modified to incorporate attendance.csv DT output as well. Just remember to change the namecol and typecol.
+correct_names <- function(dt=vislog,corr="name_corr.csv",namecol="name",typecol="type"){
   dtchanges <- fread(corr)
-  x1 <- dtchanges[dt,on=.(oldname=name,type),nomatch=0][,qc(oldname,newname,type,entry),with=F] %>% unique
-  x2 <- x1[dt,on=.(oldname=name,type=type,entry=entry)]
+  x1 <- dtchanges[dt,on=c(oldname=namecol,type=typecol),nomatch=0][,.(oldname,newname,type)] %>% unique
+  x2 <- x1[dt,on=c("oldname"=namecol,"type"=typecol)]
   x3 <- x2[,name:=ifelse(is.na(newname),oldname,newname)][,c("oldname","newname"):=NULL] %>% unique
   # setcolorder(x3,neworder = names(vislog))
   x3
 }
 
-# guard attrition calculations ======
+# guard attrition calculations
 # have to use vislog with old data since inception
 # now these 2 functions just return new / exited guards. Also the start date is Aug 2018.
 marknew <- function(data=vislog,vis="Security|Guard"){
@@ -234,58 +236,10 @@ pr_html_guards <- function(){
     htmlTable(align=c("lllllrr"))
 }
 
-# ---- attrition code ends====
-
-# --- OTHER FUNCTIONS -----
+# --- SECURITY -----
 #is used to show daily attendance - but should not be added for monthly. For monthly use calcattendnce()
 # this is the rule based attendance
-markattendance <- function(dt = tall_stats,dm=duty_matrix,rule=c(half=0.75,zero=0.25)){
-  dt <- dt[dm,on="type",nomatch=0]
-  dt[,att:=1]
-  dt[tstay < rule["half"]*dutyhrs,att:=0.5]
-  dt[tstay < rule["zero"]*dutyhrs,att:=0]
-}
 
-# simplified by not loading employee list from google sheet and no strict matching names. Thats needed for salary and so activate salarycalc if needed
-# this is fantastic. Reliable and fast.
-calc_att_daily <- function(m="Jul_2020",embassy=T,hrs=F,withtotals=T,dt=vislog,salarycalc=F){
-  staffdt <- dt[grepl(ifelse(embassy,embassy_string,squad_string),type,ig=T) & crfact(entry)==m][duty_matrix,on="type",nomatch=0]
-  if(salarycalc) staffdt <- emp_subset(mnth = m,dt) # needed for salary
-  wide1 <- staffdt %>%
-    .[,.(tstay=sum(stayhrs),trips=.N),by=.(day(entry),name,type)] %>% 
-    markattendance() %>% # this marks half day for less than 75% hours of duty and 0 for < 25%
-    dcast(name + type ~ day,fun.aggregate = sum,value.var="att")
-  wide2 <- staffdt[,.(tstay=sum(stayhrs) %>% round(digits = 2),trips=.N),by=.(day(entry),name,type,dutyhrs)] %>% 
-    dcast(name + type ~ day,fun.aggregate = sum,value.var="tstay")
-  if(withtotals){
-    wide1 <- janitor::adorn_totals(wide1,where = c("row","col"))
-    wide2 <- janitor::adorn_totals(wide2,where = c("row","col"))
-  }
-  if(hrs) wide2 else wide1
-}
-
-# a very short code without bells and whistles to check attendance of any staff quickly
-quick_hrs <- function(pat="Housekee",m=3,data=vislog){
-  data[grepl(pat,type,ig=T) & month(entry)==m][,.(stay=sum(stayhrs)),by=.(name,day(entry),type,weekdays(entry))] %>% dcast(name + type ~ day)
-}
-
-# this is the  manhours based attendance so not on a daily basis. Donot use it for internal staff.
-calcattendance <- function(m="Oct_2019",visdt=vislog,dm=duty_matrix,type=squad_string){
-  dt<- show_gap(m,dt = visdt,type_str = type)
-  maxdate <- max(day(dt$entry))
-  x1 <- dt[double==T | consec==T,.(dble_shifts=.N),by=name]
-  #x11 <- dt[triple==T,.(trple_shifts=.N),by=.(name)]
-  x2 <- dt[,{
-    da<-unique(day(entry))
-    ab<- setdiff(seq_len(maxdate),da)
-    .(abdays=list(ab),abn=length(ab),prdays=maxdate-length(ab))},
-    by=.(name,type)]
-  x3 <- dt[dm,on="type",nomatch=0][,
-                                   .(tothrs=sum(stayhrs,na.rm = T),
-                                     duties=sum(stayhrs,na.rm = T)/first(dutyhrs),duty_hrs=first(dutyhrs)),
-                                   by=.(name,type)]
-x11[x1,on="name"][x2,on="name"][x3,on=.(name,type)] %>% setcolorder(neworder = c("name","type","duty_hrs"))
-}
 
 # reduce the usage of analyze except for SD and mean/median analysis; prefer to use show_gaps() as more versatile
 analyse <- function(mnth=10,DT=vislog,emp_flat=F,emp_rwa=F,emp_security=F,flat_interaction=T,curday=day(now())){
@@ -490,7 +444,7 @@ holidaydt <- function(passed_mnths=8:10){
 pasteSh <- function(x) paste(unique(x),collapse = "+")
 
 
-# Now use this for security only
+# Not used bur use to recollect excel processing 
 upd_staff_attendance <- 
   function(
     mnth= "Jul_2019",
@@ -523,7 +477,6 @@ upd_staff_attendance <-
     addWorksheet(wb,"wide",tabColour = "blue")
     addWorksheet(wb,"daily",tabColour = "grey")
     #addWorksheet(wb,"swipes",tabColour = "grey")
-    # --- STYLES ------
     sty.cen <- createStyle(halign = "center")
     sty.rt <- createStyle(halign = "right")
     sty.tall <- createStyle(valign = "center")
@@ -546,8 +499,7 @@ upd_staff_attendance <-
     
     sty.hours <- createStyle(numFmt = "0.0",textDecoration = "italic",halign = "right")
     snum <- createStyle(numFmt = "#,##0.00")
-    
-    # --- END of STYLE DEFN ------
+
     
     # main function to write a table with style for title
     append_short_tables <- function(dtreport,sheetnumber,title="DUMMY",sty,cols=40, offset=0){
@@ -613,37 +565,76 @@ upd_staff_attendance <-
     if(upload) gs_upload(file = tmpfile,sheet_title = google_sheet_file,overwrite = T)
   }
 
+################## STAFF ATTENDANCE AND PAYMENTS ################
 
-# the next 2 functions may not be uptodate, and best avoided as employee database must not be kept in two places. Joining them is always a problem.
-#download staff details
-dstaff <- function(sheet_salary = "Embassy_salary",sheet_details="Staff Details"){
-  gs_download(gs_title(sheet_salary),ws = 1,overwrite = T,to = "emb_sal.csv")
-  gs_download(gs_title(sheet_details),ws = "database",overwrite = T,to = "emb_emp.csv")
+# Process the downloaded attendance.csv from new dashboard
+proc_attend <- function(fname="attendance_detail.csv",mth=10){
+  x1 <- fread("attendance_detail.csv")
+  x1[,Date_IN:=dmy(Date)]
+  x1 <- x1[month(Date_IN)==mth]
+  x1[,Date_OUT:=fifelse(grepl("am",`Time Out`) & grepl("pm",`Time In`), Date_IN + days(1),Date_IN)]
+  x1[,inat:=dmy_hm(paste(Date,`Time In`))]
+  x1[,outat:=dmy_hm(paste(Date,`Time Out`))]
+  x1[!is.na(outat),mins:=as.numeric(outat - inat)]
+  x1[,mins:=fifelse(mins<0,24*60 + mins,mins)]
+  x1[,hours:=mins/60]
+  x1[,att:=ifelse(grepl("Secur",Type),round_to_fraction(hours/12,denominator = 4),NA)]
+  x1[,att:=ifelse(grepl("Lady",Type),round_to_fraction(hours/8,denominator = 4),att)]
+  x1[,att:=ifelse(grepl("Ele",Type),round_to_fraction(hours/10,denominator = 2),att)]
+  x1[,att:=ifelse(grepl("Plu",Type),round_to_fraction(hours/10,denominator = 2),att)]
+  x1[,att:=ifelse(grepl("House",Type),round_to_fraction(hours/8,denominator = 4),att)]
+  x1[,att:=ifelse(grepl("STP",Type),round_to_fraction(hours/12,denominator = 4),att)]
+  x1[,att:=ifelse(grepl("Gardener",Type),round_to_fraction(hours/8,denominator = 4),att)]
 }
 
-# this function just reads from the downloaded excel sheets (downloaded  by dstaff() above)
-loademp <- function(entry_mth="May_2019",detfile = "emb_emp.csv",data=vislog){
-  emp <- fread(detfile)
-  emp[,live:=as.logical(live)]
-  lemp <- emp[live==T]
-  mygate_names<- data[crfact(entry) == entry_mth & grepl(embassy_string,type),unique(name)]
-  if(length(setdiff(mygate_names,lemp$name_mygate)) > 0){
-    message("Difference in names of employees found [ following are found in myGate but not in gsheet]")
-    print(setdiff(mygate_names,lemp$name_mygate))
-    lemp
-  } else
-  lemp
+markattendance <- function(dt = tall_stats,dm=duty_matrix,rule=c(half=0.75,zero=0.25)){
+  dt <- dt[dm,on="type",nomatch=0]
+  dt[,att:=1]
+  dt[tstay < rule["half"]*dutyhrs,att:=0.5]
+  dt[tstay < rule["zero"]*dutyhrs,att:=0]
 }
 
-# ensure you download roster first by droster() - Instead use calc_att_daily() and compute salary in google sheet after pasting the output
-calc_sal <- function(mnth=5,data=vislog){ # to change mnth from numeric to factor soon
-  dataemp <- emp_subset(crfactm(mnth,2019),data = data)
-  x1 <- dataemp[,.(tstay=sum(stayhrs),trips=.N),by=.(day(entry),name,type)] %>% markattendance()
-  x2 <- loademp(entry_mth = crfactm(mnth,2019))[ewd_rost(month = mnth,holidays = F),on=.(name_mygate=name)] 
-  x3 <- x1[,.(sumatt=sum(att,na.rm = T)),by=name][order(name)]
-  #x4 <- x2[x3,on=.(name_mg=name),nomatch=0] # this is needed as name as in myGate are to be matched and not Rudra;s salary DB
-  x4 <- x2[x3,on=.(name_mygate=name)]
-  x4[,cur_sal:=salary*(sumatt/ewd)]
+# simplified by not loading employee list from google sheet and no strict matching names. Thats needed for salary and so activate salarycalc if needed
+# this is fantastic. Reliable and fast.
+calc_att_daily <- function(m="Jul_2020",embassy=T,hrs=F,withtotals=T,dt=vislog,salarycalc=F){
+  #line added only for Aug 2020 for one gardener who was missed in type
+  dt[grepl("rafik",name,ig=T) & m=="Aug_2020",type:="Society Gardener-Male"]
+  staffdt <- dt[grepl(ifelse(embassy,embassy_string,squad_string),type,ig=T) & crfact(entry)==m][duty_matrix,on="type",nomatch=0]
+  if(salarycalc) staffdt <- emp_subset(mnth = m,dt) # needed for salary
+  wide1 <- staffdt %>%
+    .[,.(tstay=sum(stayhrs),trips=.N),by=.(day(entry),name,type)] %>% 
+    markattendance() %>% # this marks half day for less than 75% hours of duty and 0 for < 25%
+    dcast(name + type ~ day,fun.aggregate = sum,value.var="att")
+  wide2 <- staffdt[,.(tstay=sum(stayhrs) %>% round(digits = 2),trips=.N),by=.(day(entry),name,type,dutyhrs)] %>% 
+    dcast(name + type ~ day,fun.aggregate = sum,value.var="tstay")
+  if(withtotals){
+    wide1 <- janitor::adorn_totals(wide1,where = c("row","col"))
+    wide2 <- janitor::adorn_totals(wide2,where = c("row","col"))
+  }
+  if(hrs) wide2 else wide1
+}
+
+# a very short code without bells and whistles to check attendance of any staff quickly
+quick_hrs <- function(pat="Housekee",m=3,data=vislog){
+  data[grepl(pat,type,ig=T) & month(entry)==m][,.(stay=sum(stayhrs)),by=.(name,day(entry),type,weekdays(entry))] %>% dcast(name + type ~ day)
+}
+
+# this is the  manhours based attendance so not on a daily basis. Donot use it for internal staff.
+calcattendance <- function(m="Oct_2019",visdt=vislog,dm=duty_matrix,type=squad_string){
+  dt<- show_gap(m,dt = visdt,type_str = type)
+  maxdate <- max(day(dt$entry))
+  x1 <- dt[double==T | consec==T,.(dble_shifts=.N),by=name]
+  #x11 <- dt[triple==T,.(trple_shifts=.N),by=.(name)]
+  x2 <- dt[,{
+    da<-unique(day(entry))
+    ab<- setdiff(seq_len(maxdate),da)
+    .(abdays=list(ab),abn=length(ab),prdays=maxdate-length(ab))},
+    by=.(name,type)]
+  x3 <- dt[dm,on="type",nomatch=0][,
+                                   .(tothrs=sum(stayhrs,na.rm = T),
+                                     duties=sum(stayhrs,na.rm = T)/first(dutyhrs),duty_hrs=first(dutyhrs)),
+                                   by=.(name,type)]
+  x11[x1,on="name"][x2,on="name"][x3,on=.(name,type)] %>% setcolorder(neworder = c("name","type","duty_hrs"))
 }
 
 emp_subset <- function(mnth="May_2019",data=vislog){ 
@@ -697,8 +688,6 @@ vis_sum <- function(tpat="^Technical",npat="",starting="Aug_2018"){
            ,totstay:=avgstay*tottrips][order(crfact,name)]
 }
 
-# this is a scatter plot on the number of trips for each driver. This should move up and cluster around 20 - 30.
-# p7 <- vis_sum(tpat = "^Driver") %>% ggplot(aes(crfact,tottrips)) + geom_point(aes(size=avgstay,color=avgstay>16),position = "jitter")
 
 longstay <- function(stdate=NA,enddate=now(),mnth="Jan_2019"){
   if(is.na(stdate))
@@ -763,25 +752,6 @@ sec_shift <- function(mnth="Oct_2019",pattern=squad_string,dtvis=vislog){
        ]
 }
   
-# this is not as useful as the sec_shift : we are getting NA in nightsh : yet to debug
-tech_shift <- function(mnth="Dec_2019",pattern="Electri|Plumber",dtvis=vislog){
-  yr <- str_sub(mnth,-4)
-  mno <- which(month.abb==str_sub(mnth,1,3))
-  dt <- copy(dtvis[grepl(pattern,type,ig=T) & crfact(entry)==mnth])
-  dt[,totday:=sum(stayhrs,na.rm = T),by=.(name,day(entry))]
-  dt[,flats:=NULL]; dt[,from:=NULL]; dt[,vehicle:=NULL]
-  day_shift_start <-  formatC(seq_len(days_in_month(mno)),digits = 1,flag = "0") %>% paste(yr,mno,.,sep = "-") %>% paste("08:00") %>% as.POSIXct()
-  night_shift_start <-  formatC(seq_len(days_in_month(mno)),digits = 1,flag = "0") %>% paste(yr,mno,.,sep = "-") %>% paste("20:01") %>% as.POSIXct()
-  mat_main_shift <- matrix(c(day_shift_start,night_shift_start),ncol = 2)
-  mat_ot_shift <- matrix(c(night_shift_start,shift(day_shift_start,type = "lead",fill = last(day_shift_start) + ddays(1))),ncol = 2)
-  dt[,
-     # DescTools::Overlap allows x as matrix of dates while as just a vector of two date values
-     nightsh := seq_len(nrow(dt)) %>% map(~Overlap(mat_ot_shift,c(dt$entry[.x],dt$exit[.x]))/3600) %>% map_int(~which(.x > 1) %>% ifelse(length(.)==0,NA,.) )][,
-       daysh := seq_len(nrow(dt)) %>% map(~Overlap(mat_main_shift,c(dt$entry[.x],dt$exit[.x]))/3600) %>% map_int(~which(.x > 1) %>% ifelse(length(.)==0,NA,.) )][,
-          hrs_night := seq_len(nrow(dt)) %>% map(~Overlap(mat_ot_shift,c(dt$entry[.x],dt$exit[.x]))/3600) %>% map_dbl(sum)][,
-            hrs_day := seq_len(nrow(dt)) %>% map(~Overlap(mat_main_shift,c(dt$entry[.x],dt$exit[.x]))/3600) %>% map_dbl(sum)
-       ]
-}
   
 # change shift to "day", "night" or "all"; collapse=F AND shift="all" will give day and night in alternate rows
 # pipe in the output of prev function to this
@@ -843,7 +813,7 @@ vehshape <- function(txtfile="vehicle_logs/vehlog_feb15_mar15.csv"){
 
 # pass the vislog and a days range (pass 1:31 if full month needed)
 plot_viscount <- function(dt = vislog,days=1:31,tit="EMBASSY HAVEN VISITOR COUNT",subtit="Month on month"){
-dt <- dt[day(entry) %in% days & !is.na(flats) & !grepl("Deliver",type,ig=T)]
+dt <- dt[day(entry) %in% days & !is.na(flats) & !grepl("Deliver",type,ig=T) & !grepl("stay",from,ig=T)]
 dt[,count:=.N,by=crfact(entry)]
 dt[,countmax:=max(count,na.rm = T)]
 data <- dt[,.(month=crfact(entry),countmax,count)] %>% unique
@@ -918,6 +888,14 @@ exclude_stayGate <- function(dt,exclusionfile="lockdown_exclusions.csv"){
   x1[,flatn:=as.factor(flatn)]
   dt <- dt[!grepl("stay\\s*at\\s*gate",x = from,ig=T)] # exclude stay at gate guests
   anti_join(dt,x1)
+}
+
+# excludes weekends but includes every visitor
+plot_daily_visitors <- function(dt=vislog,removecommon=T){
+  filter <- dt[,!weekday %in% c("Saturday","Sunday") ]
+  if(removecommon==T) filter <- filter & dt[,!is.na(flats) & !grepl("stay",from,ig=T)]
+  
+  dt[filter,.N,.(date=as.Date(entry,tz="Asia/Kolkata"))][order(date)] %>% ggplot() + geom_line(aes(date,N)) + scale_x_date(date_breaks = "months",date_labels = "%b")
 }
 
 ############## end

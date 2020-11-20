@@ -20,6 +20,7 @@ library(htmltools)
 library(knitr)
 library(kableExtra)
 library(textclean)
+library(janitor)
 source("~/Dropbox/bank-statements/globalfns.r")
 if(search() %>% str_detect("keys.data") %>% any() %>% not) attach("keys.data")
 # New process after launchiing googlesheets4 on July 25: single line append command for new bank statements
@@ -584,7 +585,9 @@ acct_grp <- acct_ids[,.(flats=paste(flatn,collapse=";")),by=acct][acct_inv,on="a
 
 # load acct ids from local file instead of regenerating them from rdu
 join_accts <- function(st){
-  st_split <- cSplit(st,splitCols = "flats",direction = "wide",sep = ";",type.convert = F,drop = F )
+  st_split <- cSplit(st,splitCols = "flats",direction = "wide",sep = "[,;]",type.convert = F,drop = F,fixed = F )
+  st_split[,flat_status:=fifelse(!(is.na(flats) | nchar(flats)==0) & is.na(as.integer(flats_1)),"Error","Fine")] # add a flat string status Error flag
+  if(st_split[flat_status=="Error",.N] >0) message ("Found flat string error at: ",st_split[flat_status=="Error",flats])
   st_split <- st_split[,flatn:=ifelse(!is.na(flats),as.integer(flats_1),NA)][!is.na(flatn)] # this line will throw warnings if flats is non numeric. To remind Kiran
   st_split <- st_split[acct_ids,on=.(flatn),nomatch=0]
   st2 <- st_split[acct_inv,on=.(acct),nomatch=0]
@@ -593,26 +596,28 @@ join_accts <- function(st){
 
 # new reco code works on account ids and cumulative payments (Note: maitenance category payments are all cumulatively added)
 # load this in google sheet worksheet named reco: remember to pass the list of two DTs as outputted by proc_xls_hdfc()
-reco_cum <- function(ldt,ason=Sys.Date()){
-  stopifnot(!is.data.table(ldt))
-  st1 <- rbind(ldt[[1]],ldt[[2]][,cr:=booked_cr],fill=T)[as.Date(cr_date)<=ason] # append the supplementary booked credits at end of bank statement
+reco_cum <- function(sthdfc=st_hdfc,ason=Sys.Date()){
+  # stopifnot(!is.data.table(ldt))
+  # st1 <- rbind(ldt[[1]],ldt[[2]][,cr:=booked_cr],fill=T)[as.Date(cr_date)<=ason] # append the supplementary booked credits at end of bank statement
+  st1 <- sthdfc
   st2 <- join_accts(st1) 
   setDT(st2)
-  st2[,mtce_amt:=ifelse(category=="Maintenance",ifelse(is.na(booked_cr),cr,booked_cr),NA)] # booked_cr is more accurate when maintenance amount + penalty is paid in one transaction
-  st2[,penal_amt:=ifelse(category=="Penalty",ifelse(is.na(booked_cr),cr,booked_cr),NA)]
-  st2[,other_amt:=ifelse(grepl("Shifting|party|Interior|Misc",category,ig=T),ifelse(is.na(booked_cr),cr,booked_cr),NA)]
+  # st2[,mtce_amt:=ifelse(category=="Maintenance",ifelse(is.na(booked_cr),cr,booked_cr),NA)] # booked_cr is more accurate when maintenance amount + penalty is paid in one transaction
+  st2[,mtce_amt:=ifelse(category=="Maintenance",cr,0)] # copied the above line and simplified
+  # st2[,penal_amt:=ifelse(category=="Penalty",ifelse(is.na(booked_cr),cr,booked_cr),NA)]
+  # st2[,other_amt:=ifelse(grepl("Shifting|party|Interior|Misc",category,ig=T),ifelse(is.na(booked_cr),cr,booked_cr),NA)]
   st2[,mnths_actd_for:=mtce_amt/tot_inv]
   #st2[,mnths_actd_for := ifelse(category=="Maintenance", round(cr/tot_inv,1),NA)]
   st3 <- st2[,.(mtcepaidfor=formattable::digits(round(sum(mnths_actd_for,na.rm = T),2),2),
-                totmtcepaid = accounting(sum(mtce_amt,na.rm = T),0),
-                totpen=accounting(sum(penal_amt,na.rm = T)),
-                tot_others=accounting(sum(other_amt,na.rm = T))
+                totmtcepaid = accounting(sum(mtce_amt,na.rm = T),0)
+               # totpen=accounting(sum(penal_amt,na.rm = T)),
+                # tot_others=accounting(sum(other_amt,na.rm = T))
                 ),
              by=acct][acct_grp,on="acct",nomatch=0]
   st3[!is.na(flats),paidupto:=last(marrf(round(mtcepaidfor - 0.3,0))),by=rownames(st3)] # round up only if > 0.8
   st3[,excess_paid:=round(totmtcepaid - tot_inv*round(mtcepaidfor,0),0)]
   setnames(st3,qc(tot_inv),qc(monthly_invoice))
-  setcolorder(st3,qc(acct,flats,monthly_invoice,mtcepaidfor,paidupto,excess_paid,totpen,tot_others))
+  setcolorder(st3,qc(acct,flats,monthly_invoice,mtcepaidfor,paidupto,excess_paid))
   return(st3)
 }
 
@@ -633,14 +638,14 @@ dues_as_on <- function(ldt,ason=Sys.Date()){
   st2[,penal_amt:=ifelse(category=="Penalty",ifelse(is.na(booked_cr),cr,booked_cr),NA)]
   st2[,mnths_actd_for:=mtce_amt/tot_inv]
   st3 <- st2[,.(mtcepaidfor=round(sum(mnths_actd_for,na.rm = T),1),
-                totmtcepaid = round(sum(mtce_amt,na.rm = T),0),
-                totpen_paid=sum(penal_amt,na.rm = T)
+                totmtcepaid = round(sum(mtce_amt,na.rm = T),0)
+                #totpen_paid=sum(penal_amt,na.rm = T)
   ),
   by=acct][acct_grp,on="acct",nomatch=0] # monthly invoice is binded
   setnames(st3,c("tot_inv"),c("mnth_invoice"))
   st3[!is.na(flats),paidupto:=last(marrf(mtcepaidfor)),by=rownames(st3)]
   st3[,shortf := (mnth_invoice * nmths - totmtcepaid)]
-  st3[,pen := ifelse(nmths - mtcepaidfor >=1, round(nmths - mtcepaidfor,0)*500, 0)]
+  #st3[,pen := ifelse(nmths - mtcepaidfor >=1, round(nmths - mtcepaidfor,0)*500, 0)]
   st3[,mi := round(nmths - mtcepaidfor - 1,digits = 0)]
   st4 <- st3[mi >=1, .(intt= first(mnth_invoice)*mi*(mi + 1) * 0.025/2),by=acct][st3,on="acct"]
   st4[,ason:=ason]
@@ -847,7 +852,7 @@ lastpaid <- function(st=st_master){
 }
 
 pull_idbi_pdf <- function(path="idbi"){
-  files <- list.files(path = path,pattern = "pdf$",full.names = T)
+  files <- list.files(path = path,pattern = "OpTrans.*pdf$",full.names = T)
   stopifnot(length(files)>0)
   read_one_file <- function(fname){
     ftonum <- function(x) x %>% as.character %>% str_remove_all(",") %>% as.numeric()
@@ -878,7 +883,23 @@ pull_hdfcmaster <- function(file="st_hdfc.csv"){
   x1 <- fread(file)
   x1[,cr_date:=parse_date_time(cr_date,orders = c("ymdHMS","mdyHMS"),tz = "Asia/Kolkata")]
   x2 <- x1[,c(1:12)]
-  x2 %<>% map_at(.at = c(2,3,5),~str_remove_all(.x,"[,\u20b]") %>% str_extract("\\d+") %>% as.numeric)  
+  x2 %<>% map_at(.at = c(2,3,5),~ str_remove_all(.x,",") %>% str_extract("\\d+") %>% as.numeric)  
   x2 %<>% map_at(.at = c(7,10,11,12), as.factor)
   as.data.table(x2)
+}
+
+npv_diff <- function(flat,inv,daysbehind=0,dt=st_hdfc,dayrate=0.02/30){
+  cutoffdate <- as.Date(Sys.time() - ddays(daysbehind))
+  dt <- dt[cr_date>=ymd(20200101) & cr_date <= cutoffdate & grepl(flat,flats) & category=="Maintenance"]
+  dt_dues <- data.table(dates=ymd(sprintf("2020%02d%s",1:9,"01")),amt=inv) # hard coded from Jan 2020
+  dt_dues <-  dt_dues[dates <= cutoffdate]
+  N <- as.numeric(cutoffdate - ymd(20200101)) # hard codes Jan 1 2020
+  dt_dues[,days:=  -as.numeric(first(dates) - dates) + 1]
+  cf_recd <- dt$cr
+  day_int <- dt[, N - as.numeric(as.integer(cutoffdate - as.Date(cr_date))) + 1]
+  npv_expected <- FinancialMath::NPV(cf0 = 0,times =dt_dues$days ,i = 0.02/30,cf = dt_dues$amt)
+  npv_actual <- FinancialMath::NPV(cf0 = 0,i = dayrate,cf = cf_recd,times=day_int)
+  totdue <- dt_dues[,sum(amt)]
+  totrecd <- sum(cf_recd)
+  list(day_credit=day_int,day_due=dt_dues$days,  cf=cf_recd, total_due=totdue, recd=totrecd, gap=  totdue - totrecd, gapnpv =  npv_expected - npv_actual)
 }
