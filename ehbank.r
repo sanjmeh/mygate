@@ -1,3 +1,4 @@
+# ===== Library loading =======
 library(lubridate)
 library(assertthat)
 library(purrr)
@@ -23,17 +24,18 @@ library(textclean)
 library(janitor)
 source("~/Dropbox/bank-statements/globalfns.r")
 if(search() %>% str_detect("keys.data") %>% any() %>% not) attach("keys.data")
+
+source("~/Dropbox/bank-statements/globalfns.r")
+# ==== Description of steps =======
 # New process after launchiing googlesheets4 on July 25: single line append command for new bank statements
-########Appending new BANK DATA ########
 # 1. pulltxt("SANJAUTH@EHAOA_1595689956077.txt")[cr_date>=ymd(20200708)][order(cr_date),.SD,.SDcols=names(x1)[1:7]] %>% sheet_append(key_embassy_master,.,sheet = "master")
 # 2. pull_idbi_pdf()[cr_date>ymd(20200701) & day(cr_date)>=14] %>% sheet_append(ss = key_embassy_master,data = .,sheet = "IDBI")
 
 # downmaster is now simplified skipping functionality of credit booking and supplementary credit tracking.
 
-
 #source("park.r")
 #source("mygate.R")
-
+# ===== Loading global variables =================
 drive_auth_configure(api_key = apikey_googlesheets)
 
 if(!exists("rdu")) rdu <- fread("rdu.txt")
@@ -44,7 +46,7 @@ total_due <- sum(rdu$sqft*5.05*1.18)
 flatcats <- c("Sinking fund", "Maintenance", "Penalty", 
               "Interior work charges", "Shifting IN/OUT", "Common area")
 
-
+# ====== FUNCTIONS ================
 # to be modified to gs4: 
 downcoll<- function(g2=gs_key(key_chqcoll)) as.data.table(gs_read(g2,ws = "new_format",range = cell_cols("A:G"),skip=2,col_names=F)) #this will work on google sheet Society cheque collection
 
@@ -52,20 +54,20 @@ downcoll<- function(g2=gs_key(key_chqcoll)) as.data.table(gs_read(g2,ws = "new_f
 downmaster <- function(keymaster=key_embassy_master){
   dt <- range_read(ss = key_embassy_master, sheet = "master",range = "A:R",col_types = c("TddcdccdTcc?cccccc"))
   setDT(dt)
-  confl_flats <- dt[!is.na(Flat_nbs) & !is.na(flats) & Flat_nbs != flats]
-  if(nrow(confl_flats)>0) {
-    message("Conflicting flat taggings corrected:")
-    print(confl_flats[,.(cr_date,Amount=cr,mode,narr,flats,Flat_nbs)])
-  }
-  dt[!is.na(Flat_nbs),flats:=Flat_nbs]
-  
-  confl_cats <- dt[!is.na(Category) & !is.na(category) & category!=Category]
-  if(nrow(confl_cats)>0){
-    message("Conflicting category taggings corrected:")
-    print(confl_cats[,.(category,Category)])
-  }
-  dt[!is.na(Category),category:=Category]
-  dt[,category:=as.factor(category)]
+  # confl_flats <- dt[!is.na(Flat_nbs) & !is.na(flats) & Flat_nbs != flats]
+  # if(nrow(confl_flats)>0) {
+  #   message("Conflicting flat taggings corrected:")
+  #   print(confl_flats[,.(cr_date,Amount=cr,mode,narr,flats,Flat_nbs)])
+  # }
+  # dt[!is.na(Flat_nbs),flats:=Flat_nbs]
+  # 
+  # confl_cats <- dt[!is.na(Category) & !is.na(category) & category!=Category]
+  # if(nrow(confl_cats)>0){
+  #   message("Conflicting category taggings corrected:")
+  #   print(confl_cats[,.(category,Category)])
+  # }
+  # dt[!is.na(Category),category:=Category]
+  #dt[,category:=as.factor(category)]
   cat("Writing file..")
   fwrite(dt,file = "hdfc_master.csv",dateTimeAs = "write.csv")
   cat("written")
@@ -260,7 +262,7 @@ getrates <- function(flatrange) map_dbl(flatrange,getrate)
 #--- These functions are used to summarise the general Accounting ------
 
 # Petty cash processing - modify to gs4
-dpetty <- function(outfile="petty2.xlsx") gs_download(from = gs_key(key_pettytall),to = outfile,overwrite = T) 
+dpetty <- function(outfile="petty2.xlsx") range_read(ss = as_id(key_pettytall),to = outfile,overwrite = T) 
 
 # pettyc() will read from local excel file which is set at the default as used in dpetty()
 pettyc <- function(dfile="/Users/sm/Dropbox/RWAdata/petty2.xlsx") {
@@ -585,7 +587,7 @@ acct_grp <- acct_ids[,.(flats=paste(flatn,collapse=";")),by=acct][acct_inv,on="a
 
 # load acct ids from local file instead of regenerating them from rdu
 join_accts <- function(st){
-  st_split <- cSplit(st,splitCols = "flats",direction = "wide",sep = "[,;]",type.convert = F,drop = F,fixed = F )
+  st_split <- cSplit(st,splitCols = "flats",direction = "wide",sep = "[,;:]",type.convert = F,drop = F,fixed = F )
   st_split[,flat_status:=fifelse(!(is.na(flats) | nchar(flats)==0) & is.na(as.integer(flats_1)),"Error","Fine")] # add a flat string status Error flag
   if(st_split[flat_status=="Error",.N] >0) message ("Found flat string error at: ",st_split[flat_status=="Error",flats])
   st_split <- st_split[,flatn:=ifelse(!is.na(flats),as.integer(flats_1),NA)][!is.na(flatn)] # this line will throw warnings if flats is non numeric. To remind Kiran
@@ -594,24 +596,16 @@ join_accts <- function(st){
   st2 %>%  select(setdiff(names(st2),grep("flats_",names(st2),value = T)))
 }
 
-# new reco code works on account ids and cumulative payments (Note: maitenance category payments are all cumulatively added)
+# new reco code works on account ids and cumulative payments (Note: maintenance category payments are all cumulatively added)
 # load this in google sheet worksheet named reco: remember to pass the list of two DTs as outputted by proc_xls_hdfc()
 reco_cum <- function(sthdfc=st_hdfc,ason=Sys.Date()){
-  # stopifnot(!is.data.table(ldt))
-  # st1 <- rbind(ldt[[1]],ldt[[2]][,cr:=booked_cr],fill=T)[as.Date(cr_date)<=ason] # append the supplementary booked credits at end of bank statement
   st1 <- sthdfc
   st2 <- join_accts(st1) 
   setDT(st2)
-  # st2[,mtce_amt:=ifelse(category=="Maintenance",ifelse(is.na(booked_cr),cr,booked_cr),NA)] # booked_cr is more accurate when maintenance amount + penalty is paid in one transaction
-  st2[,mtce_amt:=ifelse(category=="Maintenance",cr,0)] # copied the above line and simplified
-  # st2[,penal_amt:=ifelse(category=="Penalty",ifelse(is.na(booked_cr),cr,booked_cr),NA)]
-  # st2[,other_amt:=ifelse(grepl("Shifting|party|Interior|Misc",category,ig=T),ifelse(is.na(booked_cr),cr,booked_cr),NA)]
+  st2[,mtce_amt:=ifelse(category=="Maintenance",cr,0)] 
   st2[,mnths_actd_for:=mtce_amt/tot_inv]
-  #st2[,mnths_actd_for := ifelse(category=="Maintenance", round(cr/tot_inv,1),NA)]
   st3 <- st2[,.(mtcepaidfor=formattable::digits(round(sum(mnths_actd_for,na.rm = T),2),2),
                 totmtcepaid = accounting(sum(mtce_amt,na.rm = T),0)
-               # totpen=accounting(sum(penal_amt,na.rm = T)),
-                # tot_others=accounting(sum(other_amt,na.rm = T))
                 ),
              by=acct][acct_grp,on="acct",nomatch=0]
   st3[!is.na(flats),paidupto:=last(marrf(round(mtcepaidfor - 0.3,0))),by=rownames(st3)] # round up only if > 0.8
@@ -787,7 +781,7 @@ pull_idbi_doc <- function(textfile="~/Downloads/idbi_stmt.txt",gstempl=T){
 pull_idbi_txt <- function(textfile="idbi/idbi_dec.txt",gstempl=T){
   emb <- readr::read_file(textfile)
   idbraw <- emb %>% str_split("\n") %>% unlist %>% textclean::drop_element("^$")
-  x1 <- idbraw %>% str_detect("Txn Date") %>% dplyr::cumany() %>% idbraw[.]
+  x1 <- idbraw %>% str_detect("Txn Posted Date") %>% dplyr::cumany() %>% idbraw[.]
   dt1 <- data.table(x1[3:(length(x1) - 1)])
   dt2 <- cSplit(dt1,"V1",type.convert = "as.character",sep = "\t",stripWhite = F) # stripWhite=F is essential to retain blank columns
   dt2[,cr_date:=dmy(V1_01,tz = "Asia/Kolkata")]
@@ -851,14 +845,14 @@ lastpaid <- function(st=st_master){
   lpaid[,.(lastpaid=last(cr_date),Amt=last(cr),mode=last(mode),ref=last(chq)),by=.(flatn=flats)]
 }
 
-pull_idbi_pdf <- function(path="idbi"){
+pull_idbi_pdf <- function(datestr="31-12-2020",path="idbi",filename=NULL){
+    ftonum <- function(x) x %>% as.character %>% str_remove_all(",") %>% as.numeric()
+  if(datestr=="ALL"){
   files <- list.files(path = path,pattern = "OpTrans.*pdf$",full.names = T)
   stopifnot(length(files)>0)
   read_one_file <- function(fname){
-    ftonum <- function(x) x %>% as.character %>% str_remove_all(",") %>% as.numeric()
     pdftools::pdf_text(fname) -> x1
     x1[[1]] %>% str_split("\n") %>% unlist %>% str_trim -> rawdata
-    
     dt <- rawdata %>% 
       str_subset("/2020") %>% 
       str_subset("^Tran",negate = T) %>% 
@@ -876,6 +870,51 @@ pull_idbi_pdf <- function(path="idbi"){
   
   merged_dt <- files %>% map(read_one_file) %>% rbindlist() %>% unique
   merged_dt[order(cr_date)]
+  } else 
+   {
+     if(is.null(filename)) filename <-  sprintf("%s/OpTransactionHistoryUX5%s.pdf",path,datestr) else
+       filename <- sprintf("%s/%s",path,filename)
+     nstat1 <- pdftools::pdf_text(filename)[[1]] %>% str_split("\n") %>% .[[1]] %>% str_trim %>% str_detect("^Statement") %>% which()
+     # if the line with Statement is not found on page 1 or goes to next page we will throw an error
+     if(length(nstat1)==0)
+       if(pdftools::pdf_info(filename)$pages>1){
+         nstat2 <- 
+           pdftools::pdf_text(filename)[[2]] %>% 
+           str_split("\n") %>% .[[1]] %>% 
+           str_trim %>% 
+           str_detect("^Statement") %>% which() 
+       }
+     else 
+       stop("Seems like there is a problem as there is only one page without the Statement Summary text found")
+     #assertthat::assert_that((length(nstat1) + length(nstat2)) >0,msg = "Seems the IDBI first 2 pages donot contain the Statement summary... Try lesser date range")
+     if(exists("nstat2")) {
+       bottn1 <- 753 
+      bottn2 <- 60 # picked for jul file - to be converted to linear formula
+     } else
+    bottn1 <- nstat1*15 + 255 # had to derive through linear algebra over several page sizes
+    
+    if(exists("bottn2")){ 
+      bothpages <- 
+        tabulizer::extract_tables(file = filename,pages = 1:2,area = list(c(294,38,bottn1,609),c(1.25,43,bottn2,612))) # this will return a list of pages
+      x1 <- bothpages %>% map(~as.data.table(.x)) %>% rbindlist() %>% row_to_names(1)
+    }
+    else
+     x1 <- tabulizer::extract_tables(file = filename,area = list(c(294,38,bottn1,609)))[[1]] %>% 
+       as.data.table() %>% row_to_names(1)
+    
+      
+
+if(grepl("srl",names(x1)[1],ig=T) & grepl("Balance",names(x1)[9],ig=T)){
+  setnames(x1, qc(sn,trdate,vdate,narr,chq,cred,ccy,amt,balance))
+  setDT(x1)
+  x1[,cr_date:=parse_date_time(trdate,orders = "dmyHMS",tz = "Asia/Kolkata")]
+  x1[,cr:=ifelse(grepl("Cr",cred),ftonum(amt),NA)]
+  x1[,db:=ifelse(grepl("Dr",cred),ftonum(amt),NA)]
+  x1[,.(cr_date,cr,db,narr,balance=ftonum(balance),chq)][order(cr_date)]
+} else
+      stop("The columns read in did not match to the 9 columns:",sprintf("idbi/OpTransactionHistoryUX5%s",datestr))
+  } 
+    
 }
 
 # use this on the csv file downloaded using googledrive::drive_download()
@@ -903,3 +942,17 @@ npv_diff <- function(flat,inv,daysbehind=0,dt=st_hdfc,dayrate=0.02/30){
   totrecd <- sum(cf_recd)
   list(day_credit=day_int,day_due=dt_dues$days,  cf=cf_recd, total_due=totdue, recd=totrecd, gap=  totdue - totrecd, gapnpv =  npv_expected - npv_actual)
 }
+
+# macro report - month on month starting from  bank statements rbind of HDFC and IDBI 
+macro_report <- function(n=36)
+st_ehbanks[year(cr_date)>=2018] %>% 
+  mutate(month=crfact(cr_date)) %>% 
+  group_by(month) %>% 
+  dplyr::summarise(maint_coll=sum(ifelse(grepl("Mainten",category),cr,0)),
+                   mthly_exp=sum(ifelse(!grepl("Trans|FD",category,ig=T),db,0),na.rm = T),
+                   other_earnings=sum(ifelse(!grepl("Mainten|Trans|FD|Sink",category,ig=T) & !grepl("auto_redemption",narr),cr,0),na.rm = T)) %>% 
+  mutate(cumcoll=cumsum(maint_coll),cum_invoice=cumsum(rep(total_due,n))) %>% 
+  mutate(mtcesaving=  maint_coll - mthly_exp, prov_savings=cum_invoice - cumsum(mthly_exp)) %>% 
+  mutate(savings_realised=cumsum(mtcesaving),cumdues=cum_invoice - cumcoll,roll_exp6=frollmean(mthly_exp,6), roll_coll6=frollmean(maint_coll,6))
+  
+
