@@ -6,7 +6,6 @@ library(bit64)
 library(knitr)
 library(readxl)
 library(openxlsx)
-library(plyr)
 library(data.table)
 library(stringr)
 library(splitstackshape)
@@ -24,6 +23,8 @@ library(RColorBrewer)
 source("~/Dropbox/bank-statements/globalfns.r")
 if(search() %>% str_detect("keys.data") %>% any() %>% not) attach("keys.data")
 if(search() %>% str_detect("mygate.keydata") %>% any() %>% not) attach("mygate.keydata")
+embassy_str <- "Tech|Plum|Electr|House|Gard|STP"
+squad_str <- "Superv|Lady|Guard|Security"
 
 fpath <- normalizePath(dirname(path = "."))
 if(grepl("Dropbox",fpath)) okpath <- grepl("RWAdata$",fpath) else
@@ -569,7 +570,7 @@ upd_staff_attendance <-
 
 # Process the downloaded attendance.csv from new dashboard
 proc_attend <- function(fname="attendance_detail.csv",mth=10){
-  x1 <- fread("attendance_detail.csv")
+  x1 <- fread(fname)
   x1[,Date_IN:=dmy(Date)]
   x1 <- x1[month(Date_IN)==mth]
   x1[,Date_OUT:=fifelse(grepl("am",`Time Out`) & grepl("pm",`Time In`), Date_IN + days(1),Date_IN)]
