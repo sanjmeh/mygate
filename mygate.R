@@ -1,6 +1,6 @@
 library(wrapr)
 library(dplyr)
-library(tabulizer)
+#library(tabulizer)
 library(DescTools)
 library(bit64)
 library(knitr)
@@ -18,24 +18,27 @@ library(htmlTable)
 library(assertthat)
 library(purrr)
 library(cellranger)
-library(kableExtra)
+#pacman::p_load(kableExtra)
 library(RColorBrewer)
-source("~/Dropbox/bank-statements/globalfns.r")
-if(search() %>% str_detect("keys.data") %>% any() %>% not) attach("keys.data")
-if(search() %>% str_detect("mygate.keydata") %>% any() %>% not) attach("mygate.keydata")
+library(janitor)
+
+#if(dir.exists("~/Dropbox/bank-statements")) source("~/Dropbox/bank-statements/globalfns.r") else
+  if(dir.exists("~/R/bank-statements")) source("~/R/bank-statements/globalfns.r")
+#if(search() %>% str_detect("keys.data") %>% any() %>% not) attach("keys.data")
+#if(search() %>% str_detect("mygate.keydata") %>% any() %>% not) attach("mygate.keydata")
 embassy_str <- "Tech|Plum|Electr|House|Gard|STP"
 squad_str <- "Superv|Lady|Guard|Security"
 
-fpath <- normalizePath(dirname(path = "."))
-if(grepl("Dropbox",fpath)) okpath <- grepl("RWAdata$",fpath) else
-  if(grepl("rstudio",fpath)) okpath <- grepl("embassy$",fpath)
-assert_that(okpath,msg = "You are not in the correct directory")
+#fpath <- normalizePath(dirname(path = "."))
+# if(grepl("Dropbox",fpath)) okpath <- grepl("RWAdata$",fpath) else
+#   if(grepl("rstudio",fpath)) okpath <- grepl("embassy$",fpath)
+# assert_that(okpath,msg = "You are not in the correct directory")
 curyr <- 2020
 curmth <- month(now())
-if(!exists("duty_matrix")) duty_matrix <- readRDS("dutyhrs.RDS")
-if(!exists("vislog")) vislog <- readRDS("disk_vislog.RDS")
+# if(!exists("duty_matrix")) duty_matrix <- readRDS("dutyhrs.RDS")
+# if(!exists("vislog")) vislog <- readRDS("disk_vislog.RDS")
 
-ptrn <- namewords %>% paste0(collapse = "|")
+#ptrn <- namewords %>% paste0(collapse = "|")
 
 options(scipen = 99,digits = 2)
 
@@ -68,12 +71,12 @@ up_rdu <- function(dt,upl=F){
   dt2
 }
 
-if(!exists("rdu")) rdu <- fread("rdu.txt")
-if(!exists("flats")){
-  flats <- fread("flats.csv")
-  setnames(flats, c( "Society", "Flat" ,   "flat_type", "occ_type",  "Status",    "p_intc",    "s_intc",    "members"   ) )
-}
-FLATS = rdu$flatn
+# if(!exists("rdu")) rdu <- fread("rdu.txt")
+# if(!exists("flats")){
+#   flats <- fread("flats.csv")
+#   setnames(flats, c( "Society", "Flat" ,   "flat_type", "occ_type",  "Status",    "p_intc",    "s_intc",    "members"   ) )
+# }
+# FLATS = rdu$flatn
 
 # new function to clash emails from three list : rdu, google group and mygate
 # try with tenant=F to get full email clash with mygate
@@ -83,22 +86,22 @@ comp_emails <- function(havenfile="haven-residents.csv",mygatefile="resident_det
   .x1$created %<>% dmy
   .x1$name %<>% str_trim
   .x1[,flatn:=str_extract(flatn,"\\d+") %>% as.integer()]
-  mgate<- .x1[,-c("society")]  
+  mgate<- .x1[,-c("society")]
   ggrp <- fread(havenfile)[,.(email=`Email address`)]
-  
-  
+
+
   rdu2 <- rdu %>% cSplit(splitCols = "temails",sep = ";",direction = "tall",type.convert = "character") %>% .[!is.na(temails)] %>% setDT
   tmissed_in_google <- setdiff(rdu2$temails,ggrp$email)
   cat("\nFollowing emails of tenants are missed in haven google groups, present in google sheet rdu:\n")
   print(rdu2[temails %in% tmissed_in_google,.(flatn,tname,temails,tphn)])
-  
+
   rdu3 <- rdu %>% cSplit(splitCols = "oemail",sep = ";",direction = "tall",type.convert = "character") %>% .[!is.na(oemail)] %>% setDT
   omissed_in_google <- setdiff(rdu3$oemail,ggrp$email)
   cat("\nOwner email present in rdu but but missing in google group:\n")
   print(rdu3[oemail %in% omissed_in_google,.(flatn,oname,oemail,ophn)])
-  
+
   missed_in_rdu <- setdiff(ggrp$email,c(rdu2$temails,rdu3$oemails))
-  
+
   cat("Present in google group but but missing in rdu:\n")
   print(missed_in_rdu)
 }
@@ -125,12 +128,12 @@ read_vislog <- function(mygatefile="visaug.csv",tall=T,cols=8) {
     vislog = fread(mygatefile)
     setnames(vislog,  c("soc","name","mob","type","subtype","flats", "status","vehicle", "entry","exit",c("X1","X2")) )
   }
-  
+
   vislog[name!="Name"] -> vislog
   # if(mygatefile=="visjan.csv") # visjan.csv has different date format
   #   vislog[,entry:=ymd_hms(entry,tz = "Asia/Kolkata")][,exit:=ymd_hms(exit,tz = "Asia/Kolkata")][,stay:=as.duration(exit-entry)][,stayhrs:=as.numeric(stay/3600)] else
       vislog[,entry:=dmy_hms(entry,tz = "Asia/Kolkata")][,exit:=dmy_hms(exit,tz = "Asia/Kolkata")][,stay:=as.duration(exit-entry)][,stayhrs:=as.numeric(stay/3600)]
-  
+
   vislog[,mob:=as.numeric(mob)]
   n_names_trailsp <- vislog[grepl(".+ $",name),name] %>% uniqueN()
   if(n_names_trailsp>0) {
@@ -153,10 +156,10 @@ read_vislog <- function(mygatefile="visaug.csv",tall=T,cols=8) {
                         )
   )
   ]
-  
+
   # test to be removed
-  #vislog[grepl("RAME",name) & crfact(entry)=="Oct_2019" & grepl("Secu",type),hour(entry)] 
-  
+  #vislog[grepl("RAME",name) & crfact(entry)=="Oct_2019" & grepl("Secu",type),hour(entry)]
+
   vislong <- cSplit(vislog,splitCols = "flats",sep = ";",direction = "long")
   if(tall) vislong else vislog
 }
@@ -164,8 +167,8 @@ read_vislog <- function(mygatefile="visaug.csv",tall=T,cols=8) {
 # read all csv files in one datatable & correct few names
 read_allcsv <- function(names="^vis...\\.csv",path=".",save=T){
   files <- list.files(pattern = names,path = path,full.names = T)
-  x1 <- files %>%  map(.f = ~read_vislog(mygatefile=.x)) %>% rbindlist() 
-  # Donot use purrr::map_dfr() as datatable copy is created instead of in place change. 
+  x1 <- files %>%  map(.f = ~read_vislog(mygatefile=.x)) %>% rbindlist()
+  # Donot use purrr::map_dfr() as datatable copy is created instead of in place change.
   # map_dfr() created DT will generate warnings whenever you create a new column... as a shallow copy of the DT is created
   vislog <- correct_names(dt = x1,corr = "name_corr.csv") %>% .[order(entry)]# this will not only correct a few names but output an unique DT
   saveRDS(vislog,"disk_vislog.RDS")
@@ -210,7 +213,7 @@ markexit <- function(data=vislog,vis="Security|Guard"){
 }
 
 # May want to update these codes as more guards leave us
-exit_codes <- fread("guards_exit_code.txt")
+#exit_codes <- fread("guards_exit_code.txt")
 
 
 
@@ -231,9 +234,9 @@ pr_html_guards <- function(){
   base::message("Following Guards have crossed one year. Send them a bouquet")
   print(old_guards)
   all_guards <- attr_guards[all_guards,on="name"][is.na(status),age:=now() - join_date][,.(name,Attrited,days_stayed,type,join_date,status,age)]
-  all_guards %>%  
-    mutate(joining_date=format(join_date,"%b %d, %Y"), age = round(age)) %>% 
-    dplyr::select(name,Attrited,days_stayed,type,joining_date,status,age) %>% 
+  all_guards %>%
+    mutate(joining_date=format(join_date,"%b %d, %Y"), age = round(age)) %>%
+    dplyr::select(name,Attrited,days_stayed,type,joining_date,status,age) %>%
     htmlTable(align=c("lllllrr"))
 }
 
@@ -262,11 +265,11 @@ analyse <- function(mnth=10,DT=vislog,emp_flat=F,emp_rwa=F,emp_security=F,flat_i
        trips=.N,nightstay=ifelse(max(day(exit)>min(day(entry)) & max(hour(exit)>=3)),T,F)),
      by=.(name=str_trim(name),type,mob,day=day(entry),weekday=weekdays(entry),mnth=month(entry),flats)] # dt1 is summarised with grouping on day of month.
   cat("..DONE\n")
-  
+
 
   cat(paste("\nStarted calculating unbiased means for ",ifelse(emp_flat,"Flat Employee data",ifelse(emp_rwa,"RWA employee", "Visitor data")),".. "))
   base::message(nrow(dt2)," records\n")
-  
+
   output3 <- dt2[,{
                   stay <- .SD$tstay %>% as.duration()
                   trips <- .SD$trips
@@ -285,7 +288,7 @@ analyse <- function(mnth=10,DT=vislog,emp_flat=F,emp_rwa=F,emp_security=F,flat_i
 
 find_multiple_cat <- function(dt=vislog,mnth=8,count=F){
   dt[mob!=9999999999 & month(entry) %in% mnth, {
-      mobs <- .SD[,.(name,type,mob)] %>% unique %>% .[,.N,by=mob] %>% .[N>1] 
+      mobs <- .SD[,.(name,type,mob)] %>% unique %>% .[,.N,by=mob] %>% .[N>1]
       ss <- .SD[mob %in% mobs$mob,.(name=paste(unique(name),collapse = ";"),
                                     type=paste(unique(type),collapse = ";"),
                                     flats=paste(unique(flats),collapse = ";")),
@@ -304,7 +307,7 @@ mult_cat_latest <- function(m=5){
         flats=paste(unique(flats),collapse=";")
         ),
      by=mob][order(-count)][grepl(as.character(m),mnth)]
-  
+
 }
 
 absence <- function(mnth=9,categ="driver|maid",flatwise=F,tillday=day(now()),dt = vislog){
@@ -330,7 +333,7 @@ visplot <- function(m="May_2019",categ=c("Driver"),stay=T){
   ndlycnt <- vislog[!is.na(flats) & crfact(entry)>=m & type %in% categ,.(cnt=.N,avgstay=mean(stayhrs,na.rm = T),tstay=sum(stayhrs,na.rm = T)),by=.(name,month=crfact(entry),day(entry))]
   #dailycnt2 <- vislog[!is.na(flats) & month(entry)>=10 & type %in% categ,.(cnt=.N,avgstay=mean(stayhrs,na.rm = T)),by=.(name,type,month(entry))]
   #pstay2 <- dailycnt2 %>% ggplot(aes(name,avgstay)) + geom_col() + facet_wrap(~ type + mnthf[month])
-  
+
   if(stay==T)  dailycnt %>% ggplot(aes(day,avgstay)) + geom_col() + facet_wrap(~ type + month) else
     dailycnt %>% ggplot(aes(day,cnt)) + geom_col() + facet_wrap(~ type + month)
 }
@@ -345,8 +348,8 @@ plotattr <- function(data=vislog,filter="Security|Guard",TITLE="ATTRITION",start
 #plot for checkins
 plotcheckins <- function(data=vislog,filter="Security",startmnth="May_2019",endmnth= NA,TITLE="CHECK INS"){
   data <- data[grepl(filter,type,ig=T)]
-  data[crfact(entry)>=startmnth,.N,by=.(mth=crfact(entry),type)] %>% ggplot(aes(mth,N)) + 
-    geom_line(aes(group=type,color=type)) + 
+  data[crfact(entry)>=startmnth,.N,by=.(mth=crfact(entry),type)] %>% ggplot(aes(mth,N)) +
+    geom_line(aes(group=type,color=type)) +
     geom_point() +
     labs(x="Month",y="TOTAL CHECK IN COUNTS",title=TITLE)
 }
@@ -359,14 +362,14 @@ plotbub <- function(dt=vislog,m=5,vistype="^Driver",flatwise=T,flatno=NULL){
   #anal[,day2:=day(exit)]
   if(flatwise) {
     dt2$flats %<>%  factor(levels=FLATS,ordered=T)
-    dt2[order(flats)] %>% 
-    ggplot(aes(day,y=interaction(flats,name,lex.order = T,drop = T))) + 
+    dt2[order(flats)] %>%
+    ggplot(aes(day,y=interaction(flats,name,lex.order = T,drop = T))) +
     geom_point(aes(size=tstay,color=exception,shape=nightstay)) +
     labs(x=paste("DAY OF MONTH:",month.abb[m]),y=paste("FLAT /",vistype),title="CHECKIN EFFICIENCY",subtitle= "BUBBLE CHART") +
     scale_x_continuous(breaks = 1:30)
   } else
-    dt2 %>% 
-    ggplot(aes(day,name)) + 
+    dt2 %>%
+    ggplot(aes(day,name)) +
     geom_point(aes(size=tstay,color=nightstay)) +
     #geom_point(aes(day2,y= name),color="lightgreen",size=0.9) +
     labs(x=paste("DAY OF MONTH:",month.abb[m]),y=vistype,title="CHECKIN EFFICIENCY",subtitle= "BUBBLE CHART") +
@@ -383,14 +386,14 @@ plotbub2 <- function(dt=vislog,m=5,vistype="^Driver",upperhrs = 16, vdline=15, f
   dt2[tstay>16,m16:=T]
   dt2[tstay>24,m24:=T]
   dt2[tstay>upperhrs,exception:=T]
-  
+
   if(!is.null(flatno))
     dt2 <- dt2[grepl(flatno,flats)]
   if(flat.name) {
     dt2$flats %<>%  factor(levels=FLATS,ordered=T)
     assert_that(dt2$exception %>% is.na %>% not %>% any,msg = "There is not a single exception.")
-    dt2[!is.na(flats)][order(flats)] %>% 
-      ggplot(aes(day,y=interaction(flats,name,lex.order = T,drop = T))) + 
+    dt2[!is.na(flats)][order(flats)] %>%
+      ggplot(aes(day,y=interaction(flats,name,lex.order = T,drop = T))) +
       geom_point(aes(size=tstay,color=exception)) +
      # geom_point(aes(day2,y=interaction(flats,name,lex.order = T,drop = T)),color="lightgreen",size=0.9) +
       labs(x=paste("DAY OF MONTH:",month.abb[m]),y=paste("FLAT /",vistype),title="CHECKIN EFFICIENCY",subtitle= text2) +
@@ -399,16 +402,16 @@ plotbub2 <- function(dt=vislog,m=5,vistype="^Driver",upperhrs = 16, vdline=15, f
   } else
     if(flat.only){
       dt2$flats %<>%  factor(levels=FLATS,ordered=T)
-      dt2[order(flats)] %>% 
-        ggplot(aes(day,y=flats,lex.order = T,drop = T)) + 
+      dt2[order(flats)] %>%
+        ggplot(aes(day,y=flats,lex.order = T,drop = T)) +
         geom_point(aes(size=tstay,color=exception)) +
         # geom_point(aes(day2,y=interaction(flats,name,lex.order = T,drop = T)),color="lightgreen",size=0.9) +
         labs(x=paste("DAY OF MONTH:",month.abb[m]),y=paste("FLAT /",vistype),title="CHECKIN EFFICIENCY",subtitle= text2) +
         scale_x_continuous(breaks = 1:30) +
         geom_vline(xintercept = vdline,lty=2)
     } else
-    dt2 %>% 
-    ggplot(aes(day,name)) + 
+    dt2 %>%
+    ggplot(aes(day,name)) +
     geom_point(aes(size=tstay,color=exception)) +
     #geom_point(aes(day2,y= name),color="lightgreen",size=0.9) +
     labs(x=paste("DAY OF MONTH:",month.abb[m]),y=vistype,title="CHECKIN EFFICIENCY",subtitle= text2) +
@@ -429,7 +432,7 @@ ewd_rost <- function(month=3,uptoline=21,holidays=F){
   table1$name %<>% str_trim()
   table1 <- table1[!is.na(ewd)]
   table2 <- xros[(holrow+1):uptoline,c(1,2)] %>% textclean::drop_empty_row()
-  #table2 <- table2[2:nrow(table2)] 
+  #table2 <- table2[2:nrow(table2)]
   setnames(table2,c("date","occasion"))
   table2[,date:=parse_date_time(date,orders = c("bdy","dby","ymd"),tz = "Asia/Kolkata")]
   if(holidays) table2 else table1
@@ -445,13 +448,13 @@ holidaydt <- function(passed_mnths=8:10){
 pasteSh <- function(x) paste(unique(x),collapse = "+")
 
 
-# Not used bur use to recollect excel processing 
-upd_staff_attendance <- 
+# Not used bur use to recollect excel processing
+upd_staff_attendance <-
   function(
     mnth= "Jul_2019",
     staff_string=squad_string, # this is now hardcoded. No other option
     removenames = "ZZ",
-    file_squad="squad.xlsx",file_emb = "emb.xlsx", file_flat = "flat_emp.xlsx", 
+    file_squad="squad.xlsx",file_emb = "emb.xlsx", file_flat = "flat_emp.xlsx",
     upload=F, plot = F,
     data=vislog,
     google_sheet_file = "dummy"
@@ -459,21 +462,21 @@ upd_staff_attendance <-
     #mnth<- mnum(fmnth)
     if(grepl("guard",staff_string,ig=T)) tmpfile=file_squad
     wb <- createWorkbook(title="staff_wise_chckin")
-    
+
     # remove undesired person
-    data <- data[!grepl(removenames,name,ig=T)]  
-    
+    data <- data[!grepl(removenames,name,ig=T)]
+
     # initialise with the shift database   - not to be used for attendance now.
-    
+
     dtall <- show_gap(mth = mnth,dt = dtshifts,type_str = staff_string)
     # prepare xsec - aggregated on stay time and trips per day per person
     # xsec <- copy(dtshifts)
     # xsec[,tstay:=sum(stayhrs),by=.(name,mob,day(entry))]
     #xsec[,percstay:=stayhrs/tstay*100]
     #xsec[,trips:=.N,by=.(name,day(entry))]
-    
+
     monthname <- month.name[mnth]
-    
+
     addWorksheet(wb,"summary",tabColour = "red")
     addWorksheet(wb,"wide",tabColour = "blue")
     addWorksheet(wb,"daily",tabColour = "grey")
@@ -481,27 +484,27 @@ upd_staff_attendance <-
     sty.cen <- createStyle(halign = "center")
     sty.rt <- createStyle(halign = "right")
     sty.tall <- createStyle(valign = "center")
-    sty.title1 <- createStyle(wrapText = F,fontName = "Al Tarikh", textDecoration ="bold", 
+    sty.title1 <- createStyle(wrapText = F,fontName = "Al Tarikh", textDecoration ="bold",
                               fontSize = 18,fontColour = "black",
                               halign = "center",valign = "center",fgFill = colours()[633])
-    sty.title2 <- createStyle(wrapText = T,fontName = "Al Bayan", textDecoration ="bold", 
+    sty.title2 <- createStyle(wrapText = T,fontName = "Al Bayan", textDecoration ="bold",
                               fontSize = 14,fontColour = "black",
                               halign = "right",valign = "center")
-    
+
     sty.shade_pink <- createStyle(fontName = "Al Bayan", textDecoration ="bold",bgFill = "deeppink2")
     sty.shade_green <- createStyle(fontName = "Al Bayan", textDecoration ="bold",bgFill = "chartreuse2")
     sty.shade_night <- createStyle(fontColour = "darkviolet",textDecoration ="bold")
     sty.shade_N2 <- createStyle(fontName = "Al Bayan", textDecoration ="bold",bgFill = "dodgerblue3")
     sty.shade_D2 <- createStyle(fontName = "Al Bayan", textDecoration ="bold",bgFill = "orange1")
-    
-    sty.date.number <- createStyle(wrapText = F,fontName = "Al Tarikh", textDecoration ="bold", 
+
+    sty.date.number <- createStyle(wrapText = F,fontName = "Al Tarikh", textDecoration ="bold",
                                    fontSize = 14,fontColour = "black",
                                    halign = "right",valign = "center",fgFill = "grey93" )
-    
+
     sty.hours <- createStyle(numFmt = "0.0",textDecoration = "italic",halign = "right")
     snum <- createStyle(numFmt = "#,##0.00")
 
-    
+
     # main function to write a table with style for title
     append_short_tables <- function(dtreport,sheetnumber,title="DUMMY",sty,cols=40, offset=0){
       cat("\nAppending short table in sheet:",sheetnumber, "rowno:",runner[sheetnumber])
@@ -518,7 +521,7 @@ upd_staff_attendance <-
       #addStyle(wb,sheetnumber,style = sty.title2,rows = rownumber + 2,cols = cols,stack=T) # column heading - just below table heading
       runner[sheetnumber] <<- runner[sheetnumber] + 17 # this is the global row counter to track utilised rows
     } # end of function
-    
+
     runner<- integer(10L)
     runner[1:10]<- 1  # running counter for consumed rows in the workbooks indexed in runner
     # tab_sum1 <- calcattendance(m=mnth,visdt = data)
@@ -531,7 +534,7 @@ upd_staff_attendance <-
     tab_doub<- dtshifts %>% dcast(name + type ~ day(entry),value.var="double",fun.aggregate=sum,na.rm=T)
     #tab_trip<- dtshifts %>% dcast(name + type ~ day(entry),value.var="triple",fun.aggregate=sum,na.rm=T)
     tab_tall<- dtshifts
-    # removed the extra columns from from func calls. Still to decide if these are a good idea or hard coding the styling is easier to manage.  
+    # removed the extra columns from from func calls. Still to decide if these are a good idea or hard coding the styling is easier to manage.
     append_short_tables("tab_sum2",1,title = paste("SUMMARY: ATTENDANCE-",toupper(monthname),"[Uptil: ",max(dtshifts$exit,dtshifts$entry,na.rm = T)," ]"))
     append_short_tables("tab_shift",2,title = "SHIFTS - DAY AND NIGHT")
     #append_short_tables("tab_count",2,title = "NUMBER OF TIMES CHECKED OUT")
@@ -550,17 +553,17 @@ upd_staff_attendance <-
     conditionalFormatting(wb,sheet = 2,cols = 3:(ncol(tab_shift)+2),rows = 55:68,rule = "=1",style =sty.shade_pink )
     conditionalFormatting(wb,sheet = 2,cols = 3:(ncol(tab_shift)+2),rows = 72:85,rule = "=1",style =sty.shade_pink )
     conditionalFormatting(wb,sheet = 2,cols = 3:(ncol(tab_shift)+2),rows = 89:102,rule = ">1",style =sty.shade_N2 )
-    
+
     setColWidths(wb,1,cols = c(1,2,6),widths = c(25,15,25),ignoreMergedCells = T)
     setColWidths(wb,2,cols = 1:2,widths = c(25,15),ignoreMergedCells = T)
     setColWidths(wb,3,cols = 1:3,widths = c(25,15,10),ignoreMergedCells = T)
     #setColWidths(wb,4,cols = c(1:3,5:7),widths = c(25,15,10,15,15,15),ignoreMergedCells = T)
-    
+
     addStyle(wb,1,style = snum,rows = 1:100,cols = 9:10,stack = T,gridExpand = T) # last two columns are decimal formatted
     addStyle(wb,2,style = snum,rows = 106:110,cols = 3: (ncol(tab_hc)+2) ,stack = T,gridExpand = T) # decimal formatted HC
     addStyle(wb,3,style = snum,rows = 1:1000,cols = c(8:10,15), stack = T,gridExpand = T) # decimal formatted HC
     #addStyle(wb,4,style = snum,rows = 1:1000,cols = c(8:10),stack = T,gridExpand = T) # decimal formatted HC
-    
+
     openXL(wb)
     saveWorkbook(wb,file = tmpfile,overwrite = T)
     if(upload) gs_upload(file = tmpfile,sheet_title = google_sheet_file,overwrite = T)
@@ -569,23 +572,29 @@ upd_staff_attendance <-
 ################## STAFF ATTENDANCE AND PAYMENTS ################
 
 # Process the downloaded attendance.csv from new dashboard
+# new columns in mygate raw data added "In Date" and "Out Date" since Oct 2022
+# made changes to incorporate this; simplified outdate computations.
 proc_attend <- function(fname="attendance_detail.csv",mth=10){
-  x1 <- fread(fname)
-  x1[,Date_IN:=dmy(Date)]
-  x1 <- x1[month(Date_IN)==mth]
-  x1[,Date_OUT:=fifelse(grepl("am",`Time Out`) & grepl("pm",`Time In`), Date_IN + days(1),Date_IN)]
-  x1[,inat:=dmy_hm(paste(Date,`Time In`))]
-  x1[,outat:=dmy_hm(paste(Date,`Time Out`))]
-  x1[!is.na(outat),mins:=as.numeric(outat - inat)]
-  x1[,mins:=fifelse(mins<0,24*60 + mins,mins)]
-  x1[,hours:=mins/60]
-  x1[,att:=ifelse(grepl("Secur",Type),round_to_fraction(hours/12,denominator = 4),NA)]
-  x1[,att:=ifelse(grepl("Lady",Type),round_to_fraction(hours/8,denominator = 4),att)]
-  x1[,att:=ifelse(grepl("Ele",Type),round_to_fraction(hours/10,denominator = 2),att)]
-  x1[,att:=ifelse(grepl("Plu",Type),round_to_fraction(hours/10,denominator = 2),att)]
-  x1[,att:=ifelse(grepl("House",Type),round_to_fraction(hours/8,denominator = 4),att)]
-  x1[,att:=ifelse(grepl("STP",Type),round_to_fraction(hours/12,denominator = 4),att)]
-  x1[,att:=ifelse(grepl("Gardener",Type),round_to_fraction(hours/8,denominator = 4),att)]
+  x1 <- fread(fname) |> clean_names()
+ # use standard R way of decoding time (thanks Ronak Shah in stackoverflow)
+  x1[,inat:=paste(in_date,in_time) |> parse_date_time(orders = "dmyIM %p",tz = "Asia/Kolkata")]
+  x1[,outat:=paste(out_date,out_time) |> parse_date_time(orders = "dmyIM %p",tz = "Asia/Kolkata")]
+  x1[,in_date:=as_date(inat)]
+  x1[,out_date:=as_date(outat)]
+  x1[!is.na(outat),hours:=as.numeric(outat - inat,unit = "hours")]
+  x1[,fullday_hours:=sum(hours),by = .(in_date,name)] # new line added, now the fullhrs cannot be sum aggregated.
+  x2 <- x1[,.(name,type,in_date,fullday_hours)] |> unique()
+  x2[,att:=ifelse(grepl("Secur",type),round_to_fraction(fullday_hours/12,denominator = 2),NA)]
+  x2[,att:=ifelse(grepl("Lady",type),round_to_fraction(fullday_hours/8,denominator = 2),att)]
+  x2[,att:=ifelse(grepl("Ele",type),round_to_fraction(fullday_hours/9.5,denominator = 2),att)]
+  x2[,att:=ifelse(grepl("Plu",type),round_to_fraction(fullday_hours/9.5,denominator = 2),att)]
+  x2[,att:=ifelse(grepl("House",type),round_to_fraction(fullday_hours/8,denominator = 2),att)]
+  x2[,att:=ifelse(grepl("STP",type),round_to_fraction(fullday_hours/12,denominator = 2),att)]
+  x2[,att:=ifelse(grepl("Gardener",type),round_to_fraction(fullday_hours/8,denominator = 2),att)]
+  x2[,ot:=case_when(
+      grepl("Plu|Ele",type) & att == 1 ~  pmax(0,fullday_hours - 9.5),
+      T ~  0,
+  )]
 }
 
 markattendance <- function(dt = tall_stats,dm=duty_matrix,rule=c(half=0.75,zero=0.25)){
@@ -595,18 +604,17 @@ markattendance <- function(dt = tall_stats,dm=duty_matrix,rule=c(half=0.75,zero=
   dt[tstay < rule["zero"]*dutyhrs,att:=0]
 }
 
-# simplified by not loading employee list from google sheet and no strict matching names. Thats needed for salary and so activate salarycalc if needed
+# simplified by not loading employee list from google sheet and no strict matching names.
 # this is fantastic. Reliable and fast.
-calc_att_daily <- function(m="Jul_2020",embassy=T,hrs=F,withtotals=T,dt=vislog,salarycalc=F){
+calc_att_daily <- function(m="Jul_2020",embassy=T,hrs=F,withtotals=T,dt=vislog){
   #line added only for Aug 2020 for one gardener who was missed in type
   dt[grepl("rafik",name,ig=T) & m=="Aug_2020",type:="Society Gardener-Male"]
-  staffdt <- dt[grepl(ifelse(embassy,embassy_string,squad_string),type,ig=T) & crfact(entry)==m][duty_matrix,on="type",nomatch=0]
-  if(salarycalc) staffdt <- emp_subset(mnth = m,dt) # needed for salary
+  staffdt <- dt[(grepl(ifelse(embassy,embassy_str,squad_str),type,ig=T) | mob == "9008005492") & crfact(entry)==m][duty_matrix,on="type",nomatch=0]
   wide1 <- staffdt %>%
-    .[,.(tstay=sum(stayhrs),trips=.N),by=.(day(entry),name,type)] %>% 
+    .[,.(tstay=sum(stayhrs),trips=.N),by=.(day(entry),name,type)] %>%
     markattendance() %>% # this marks half day for less than 75% hours of duty and 0 for < 25%
     dcast(name + type ~ day,fun.aggregate = sum,value.var="att")
-  wide2 <- staffdt[,.(tstay=sum(stayhrs) %>% round(digits = 2),trips=.N),by=.(day(entry),name,type,dutyhrs)] %>% 
+  wide2 <- staffdt[,.(tstay=sum(stayhrs) %>% round(digits = 2),trips=.N),by=.(day(entry),name,type,dutyhrs)] %>%
     dcast(name + type ~ day,fun.aggregate = sum,value.var="tstay")
   if(withtotals){
     wide1 <- janitor::adorn_totals(wide1,where = c("row","col"))
@@ -638,7 +646,7 @@ calcattendance <- function(m="Oct_2019",visdt=vislog,dm=duty_matrix,type=squad_s
   x11[x1,on="name"][x2,on="name"][x3,on=.(name,type)] %>% setcolorder(neworder = c("name","type","duty_hrs"))
 }
 
-emp_subset <- function(mnth="May_2019",data=vislog){ 
+emp_subset <- function(mnth="May_2019",data=vislog){
   loademp()-> empids
   data[,name:=str_trim(name)] # remove this line once the input data is clean
   data <- copy(data[name %in% empids$name_mygate & grepl(embassy_string,type) & crfact(entry) %in% mnth])
@@ -656,7 +664,7 @@ show_gap <- function(mth="Oct_2019",type_str="Security|Guard",dt=vislog,flats=F)
   #dt2[,gaphrs:=as.numeric(gap)/3600 %>% round(2)]
   dtshifts[away_before < dminutes(60) & (stayhrs + prevstay) > 22,consec:=T]
   dtshifts[stayhrs > 22,double:=T]
-  
+
   if(flats) dtshifts[order(name,entry),.(name,type,flats,prevexit,entry,exit,stayhrs=tot_shift,stay_out,prevstay,gap,weekday=weekdays(entry),shift,double,consec)] else
     dtshifts[order(name,entry),.(name,type,prevexit,entry,exit,stayhrs=tot_shift,stay_out,prevstay,gap,weekday=weekdays(entry),shift,double,consec)]
 }
@@ -668,7 +676,7 @@ trnd_checkin <- function(typeofvis="^Driver",mean=F,namestr=""){
                .(meantrips = mean(.N)),by=.(day(entry),month(entry),name)][
            meantrips>1][
              ,.N,by="month"]
-  
+
   x1[,mnth:=crfactm(mnth = month,2018)]
   output <- x1[month<=curmth,mnth:=crfactm(month,2019)][,.(mnth,Nmulti=N)][order(mnth)]
   } else{
@@ -752,33 +760,33 @@ sec_shift <- function(mnth="Oct_2019",pattern=squad_string,dtvis=vislog){
             hrs_day := seq_len(nrow(dt)) %>% map(~Overlap(mat_day_shifts,c(dt$entry[.x],dt$exit[.x]))/3600) %>% map_dbl(sum)
        ]
 }
-  
-  
+
+
 # change shift to "day", "night" or "all"; collapse=F AND shift="all" will give day and night in alternate rows
 # pipe in the output of prev function to this
 report_shifts <- function(dt,shift="day",collapse=F){
-  dt_day <- dt[!is.na(daysh),.(tot_shift=sum(hrs_day)),by=.(name,type,daysh)] %>% 
+  dt_day <- dt[!is.na(daysh),.(tot_shift=sum(hrs_day)),by=.(name,type,daysh)] %>%
     dcast(name + type ~ daysh,value.var="tot_shift",fun.aggregate=function(x) if(length(x)==0) "-" else format(x,digits = 1))
-  dt_night <- dt[!is.na(nightsh),.(tot_shift=sum(hrs_night)),by=.(name,type,nightsh)] %>% 
+  dt_night <- dt[!is.na(nightsh),.(tot_shift=sum(hrs_night)),by=.(name,type,nightsh)] %>%
     dcast(name + type  ~ nightsh,value.var="tot_shift",fun.aggregate=function(x) if(length(x)==0) "-" else format(x,digits = 1))
-  
-  if(grepl("^[Dd]",shift)) return(dt_day)  else 
+
+  if(grepl("^[Dd]",shift)) return(dt_day)  else
     if(grepl("^[Nn]",shift)) return(dt_night) else
       if(grepl("^[Aa]",shift) & collapse==F){
         dt_day[,shift:="DAY"]
         dt_night[,shift:="NIGHT"]
         rbind(dt_day,dt_night) %>% setcolorder(qc(name,shift)) %>% .[order(name)]
       } else
-        dt[,.(tot_shift=sum(hrs_day,hrs_night)),by=.(name,type,day(entry))] %>% 
-    dcast(name + type ~ day,value.var="tot_shift",fun.aggregate=function(x) if(length(x)==0) "-" else format(x,digits = 1))     
-  
+        dt[,.(tot_shift=sum(hrs_day,hrs_night)),by=.(name,type,day(entry))] %>%
+    dcast(name + type ~ day,value.var="tot_shift",fun.aggregate=function(x) if(length(x)==0) "-" else format(x,digits = 1))
+
 }
 
 create_shift_rep <- function(mnth="Oct_2019",pattern=squad_string,dtvis=vislog){
-  sec_shift(mnth = mnth,pattern = pattern,dtvis = dtvis) %>% 
-    report_shifts(shift="a") %>% 
-    kable() %>% 
-    kable_styling() %>% 
+  sec_shift(mnth = mnth,pattern = pattern,dtvis = dtvis) %>%
+    report_shifts(shift="a") %>%
+    kable() %>%
+    kable_styling() %>%
     collapse_rows(columns = 1)
 }
 
@@ -795,7 +803,7 @@ create_ot_excel <- function(names=c("plum","electr"),mnths=c("Jul_2019"),exfile=
 
 cleaned_up_stay <- function(m=3,pat=embassy_string){
   dtlong <- otcalc(pattern = pat)
-  dtlong[kind %in% c("SINGLE","LAST"),dutyend:=exit]  
+  dtlong[kind %in% c("SINGLE","LAST"),dutyend:=exit]
   dtlong[kind %in% c("SINGLE","FIRST"),dutystart:=entry]
   dt2 <- dtlong[month(entry)==m][!all(is.na(dutyend),is.na(dutystart))]
   dt2[,.(dutyst=max(dutystart,na.rm = T),dutyfin = max(dutyend,na.rm = T)),by=.(name,day(entry))]
@@ -821,9 +829,9 @@ data <- dt[,.(month=crfact(entry),countmax,count)] %>% unique
 data[,perct:=1 - count/countmax]
 data[,perct:=formattable::percent(perct)]
 data[,labpos:=mean(c(countmax,count)),by=month]
-data %>% ggplot(aes(month,count)) + geom_col() + 
-  labs(title = tit,subtitle = subtit,x="Month",y="VISITOR COUNT") + 
-  geom_errorbar(aes(ymin=count,ymax=countmax),width=0.2) + 
+data %>% ggplot(aes(month,count)) + geom_col() +
+  labs(title = tit,subtitle = subtit,x="Month",y="VISITOR COUNT") +
+  geom_errorbar(aes(ymin=count,ymax=countmax),width=0.2) +
   geom_label(aes(y=labpos,label=perct))
 }
 
@@ -844,11 +852,11 @@ plot_flatwise <- function(dt = vislog,boxtext="July 15-16",days=1:31,tit="EMBASS
   dt <- exclude_stayGate(dt) # remove absent maids and stay at gate visitors
   dt1 <- dt[,{uvis = uniqueN(mob); .(count=as.integer(uvis))},by=.(flatn,day(entry))]
   dt2 <- dt[,.(flatn,name,mob,type,from)] %>% unique
-  
+
   #dt[,count:=.N,by=.(flatn)]
   #data <- dt[,.(flatn,count)] %>% unique
   data <- dt1[!is.na(flatn)]
-  data[,Density:= case_when(count>=3 ~ 1, 
+  data[,Density:= case_when(count>=3 ~ 1,
                          count==2 ~ 2,
                          count<=1 ~ 3,
                          TRUE ~ 4
@@ -866,7 +874,7 @@ plot_flatwise <- function(dt = vislog,boxtext="July 15-16",days=1:31,tit="EMBASS
     labs(title = tit,subtitle = subtit,x="FLAT",y="UNIQUE VISITOR COUNT")+
     theme(axis.text.x = element_text(size = 18,face = "bold")) + theme(text = element_text(size = 18)) +
     geom_label(aes(x=17,y=posy),data = data.table(),label=boxtext, size=12,label.padding = unit(1.5,"lines"),label.size = 1)
-  
+
 }
 
 # comparative visitors
@@ -880,8 +888,8 @@ compare_flvis <- function(dt = vjul,days=16:31){
   dt1 <- dt[day(entry) %in% days,{uvis1 = uniqueN(mob); .(count=as.integer(uvis1))},by=.(flatn,Date=as.Date(entry))]
   dt1[,Date := format(Date,format="%B-%d")]
   zflats <- dt1[,as.character(flatn)] %>% setdiff(as.character(active_flats),.) %>% as.integer()
-  return(list(dt1=dt1,zero_vis=zflats))  
-  
+  return(list(dt1=dt1,zero_vis=zflats))
+
 }
 
 exclude_stayGate <- function(dt,exclusionfile="lockdown_exclusions.csv"){
@@ -895,8 +903,45 @@ exclude_stayGate <- function(dt,exclusionfile="lockdown_exclusions.csv"){
 plot_daily_visitors <- function(dt=vislog,removecommon=T){
   filter <- dt[,!weekday %in% c("Saturday","Sunday") ]
   if(removecommon==T) filter <- filter & dt[,!is.na(flats) & !grepl("stay",from,ig=T)]
-  
+
   dt[filter,.N,.(date=as.Date(entry,tz="Asia/Kolkata"))][order(date)] %>% ggplot() + geom_line(aes(date,N)) + scale_x_date(date_breaks = "months",date_labels = "%b")
 }
 
-############## end
+# load file named `entry_exit(%s).csv` sent by mygate for missing days
+load_missed_data <- function(serials=3:4){
+  serials %>% map(~sprintf("entry_exit (%s).csv",.x)) %>% map(fread) %>% rbindlist -> x1
+}
+
+# pass the output of `load_missed_data` and output will be appended data to master DT
+append_missed_data <- function(x1,master=vislog_dec){
+  x1 %>%
+    mutate(mob=Mobile,entry=dmy_hms(Intime,tz = "Asia/Kolkata"),exit=dmy_hms(Outtime,tz = "Asia/Kolkata")) %>%
+    mutate(stayhrs=as.numeric(exit - entry)/60) %>%
+    select(name=Name,flats=Flat,type=`Sub Type`,entry,exit,stayhrs) %>% # if you want more columns add them
+    rbind(master,.,fill=T) %>% # the other cols would be filled by NA
+    arrange(entry)
+}
+
+# Outputs the enriched attendance along with overtime column for a single employee at time.
+proc_overtime <- function(file = "~/Downloads/attendance_detail.csv",name="nag",month = 10){
+  proc_attend(file,mth = month) %>%
+    mutate(day = day(Date_IN),Mobile = as.character(Mobile),ot = ifelse(att==0,hours,hours -10),dayow = weekdays(Date_IN)) %>%
+    mutate(ot = ifelse(ot<0,0,ot)) %>%
+    filter(grepl(name,Name,ig=T))
+}
+
+load_mnthly_visitor_file <- function(filepat = "Entry_Exit"){
+    fnames <- list.files(".",pattern = filepat)
+    x1 <-
+        fnames |>
+        map(fread) |>
+        rbindlist()
+    x2 <- x1 |> clean_names()
+    x2[,entry_time:=parse_date_time(entry_time,orders = "dmyHMS",tz = "Asia/Kolkata")]
+    x2[,mobile:=as.character(mobile)]
+    x2[,mnth:=month(entry_time)]
+    x3 <-
+        x2 |> cSplit("flatlist",sep = ",",type.convert = "as.is") |>
+        tidyr::pivot_longer(cols = starts_with("flat"),values_drop_na = T,names_to = "flatn")
+    return(x3)
+}
